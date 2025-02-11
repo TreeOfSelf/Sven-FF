@@ -11,9 +11,6 @@ With this plugin you can:
 
 You can configure the exact damage scale as well, even negative numbers can work to make it so the damage heals them (I don't know why you would want this).
 
-Want to quickly respawn players?  
-`as_reloadplugin ff` will do that, and reset the timer. 
-
 ## Installation 
 Works with the v5.26 Build of Sven Co-Op.    
 
