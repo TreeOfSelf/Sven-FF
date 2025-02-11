@@ -52,7 +52,7 @@ Adjust values above as needed. If a .cfg file is not found for the map, then it 
 enabled - (1 (True) or 0 (False)) Fully enable/disable the plugin
 player - (0 - 1) Scale of player to friendly player damage
 npc - (0 - 1) 0-1 Scale of player to friendly npc damage
-npcToPlayer - (0 - 1) "Scale of friendly npc to player damage
+npcToPlayer - (0 - 1) Scale of friendly npc to player damage
 explosive - (0 - 1) Scale of explosive damage
 ```
 
