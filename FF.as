@@ -252,7 +252,7 @@ CBaseEntity@ getFriendlyNPC(Vector pos) {
 void npc_kill() {
 
 	if (cvar_enabled.GetInt() != 1 || cvar_npc.GetFloat() == 0.0) {
-		g_EngineFuncs.ServerCommand( "mp_npckill 0\n");
+		g_EngineFuncs.ServerCommand( "mp_npckill 2\n");
 		g_EngineFuncs.ServerExecute();
 		return;
 	} 
