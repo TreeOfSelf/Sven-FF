@@ -14,6 +14,12 @@ CCVar@ cvar_npc;
 CCVar@ cvar_npcToPlayer;
 CCVar@ cvar_explosive;
 
+const array<string> PROJECTILE_ENTS =
+{
+    "rpg_rocket",
+    "sporegrenade"
+};
+
 //Init
 void PluginInit() {
 	g_Module.ScriptInfo.SetAuthor("Sebastian");
@@ -22,6 +28,7 @@ void PluginInit() {
 	g_Hooks.RegisterHook(Hooks::Player::PlayerTakeDamage, @PlayerTakeDamage);
 	g_Hooks.RegisterHook(Hooks::Monster::MonsterTakeDamage, @MonsterTakeDamage);
 	g_Hooks.RegisterHook(Hooks::Weapon::WeaponPrimaryAttack, @WeaponPrimaryAttack);
+	g_Hooks.RegisterHook( Hooks::Weapon::WeaponSecondaryAttack, @WeaponSecondaryAttack );
 
 	@cvar_enabled = CCVar("enabled", 1, "Enable/Disable friendly fire plugin", ConCommandFlag::AdminOnly);
 
@@ -34,17 +41,30 @@ void PluginInit() {
 }
 
 // Hooks
-HookReturnCode WeaponPrimaryAttack(CBasePlayer@ pPlayer, CBasePlayerWeapon@ wep) {
-	if (cvar_enabled.GetInt() != 1) return HOOK_CONTINUE;
+HookReturnCode WeaponPrimaryAttack( CBasePlayer@ pPlayer, CBasePlayerWeapon@ pWeapon )
+{
+    if( cvar_enabled.GetInt() != 1 )
+        return HOOK_CONTINUE;
 
-	CBaseEntity@ foundEntity = g_EntityFuncs.FindEntityByClassname(null, "rpg_rocket");
-	if (foundEntity !is null){
-		trackedEntities.insertLast(foundEntity.entindex());
-		trackedEntitiesPosition.insertLast(foundEntity.GetOrigin());
-		trackedEntitiesOwner.insertLast(pPlayer.entindex());
-		trackedEntitiesType.insertLast("RPG");
-	}
-	return HOOK_CONTINUE;
+    CBaseEntity@ pEntity = null;
+    while( (@pEntity = g_EntityFuncs.FindEntityByClassname(pEntity, "*")) !is null )
+    {
+        if( PROJECTILE_ENTS.find(pEntity.GetClassname()) == -1 )
+            continue;
+
+        trackedEntities.insertLast(pEntity.entindex());
+        trackedEntitiesPosition.insertLast(pEntity.GetOrigin());
+        trackedEntitiesOwner.insertLast(pPlayer.entindex());
+        trackedEntitiesType.insertLast("RPG");
+    }
+
+    return HOOK_CONTINUE;
+}
+
+HookReturnCode WeaponSecondaryAttack( CBasePlayer@ pPlayer, CBasePlayerWeapon@ pWeapon )
+{
+    WeaponPrimaryAttack(pPlayer, pWeapon);
+    return HOOK_CONTINUE;
 }
 
 HookReturnCode MonsterTakeDamage( DamageInfo@ pDamageInfo ) {
