@@ -18,6 +18,7 @@ CCVar@ cvar_explosive;
 void PluginInit() {
 	g_Module.ScriptInfo.SetAuthor("Sebastian");
 	g_Module.ScriptInfo.SetContactInfo("https://github.com/TreeOfSelf/Sven-FF");
+
 	g_Hooks.RegisterHook(Hooks::Player::PlayerTakeDamage, @PlayerTakeDamage);
 	g_Hooks.RegisterHook(Hooks::Monster::MonsterTakeDamage, @MonsterTakeDamage);
 	g_Hooks.RegisterHook(Hooks::Weapon::WeaponPrimaryAttack, @WeaponPrimaryAttack);
@@ -34,7 +35,6 @@ void PluginInit() {
 
 // Hooks
 HookReturnCode WeaponPrimaryAttack(CBasePlayer@ pPlayer, CBasePlayerWeapon@ wep) {
-
 	if (cvar_enabled.GetInt() != 1) return HOOK_CONTINUE;
 
 	CBaseEntity@ foundEntity = g_EntityFuncs.FindEntityByClassname(null, "rpg_rocket");
@@ -120,6 +120,8 @@ void resetGlobals() {
 	trackedEntitiesPosition.resize(0);
 	trackedEntitiesOwner.resize(0);	
 	trackedEntitiesType.resize(0);	
+	
+	friendlyNPCHandle = EHandle();
 }
 
 void MapInit(){
