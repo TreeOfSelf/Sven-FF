@@ -55,3 +55,11 @@ npc - (0 - 1) 0-1 Scale of player to friendly npc damage
 npcToPlayer - (0 - 1) "Scale of friendly npc to player damage
 explosive - (0 - 1) Scale of explosive damage
 ```
+
+## Support
+
+[Support discord here!]( https://discord.gg/3tP3Tqu983)
+
+## License
+
+[CC0](https://creativecommons.org/public-domain/cc0/)
