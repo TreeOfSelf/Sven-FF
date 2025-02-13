@@ -1,5 +1,6 @@
 CScheduledFunction@ g_npcKillInterval;
 CScheduledFunction@ g_trackEntitiesInterval;
+CScheduledFunction@ g_MoveNPCInterval;
 
 EHandle friendlyNPCHandle;
 
@@ -14,14 +15,34 @@ CCVar@ cvar_npc;
 CCVar@ cvar_npcToPlayer;
 CCVar@ cvar_explosive;
 
+dictionary ExplosiveDamges =
+{
+    { "grenade", 100 },
+    { "monster_satchel", 150 },
+    { "monster_tripmine", 150 },
+    { "bolt", 40 },
+    { "snark", 15 },
+	{ "displacer_portal", 300}
+};
+
+
 //Init
 void PluginInit() {
+
+	float skillValue = g_EngineFuncs.CVarGetFloat("skill");
+
+	ExplosiveDamges['snark'] = (skillValue == 1 ? 5 : (skillValue == 2 ? 6 : 15));
+	ExplosiveDamges['sporegrenade'] = (skillValue == 1 ? 120 : (skillValue == 2 ? 120 : 200));
+
 	g_Module.ScriptInfo.SetAuthor("Sebastian");
 	g_Module.ScriptInfo.SetContactInfo("https://github.com/TreeOfSelf/Sven-FF");
 
 	g_Hooks.RegisterHook(Hooks::Player::PlayerTakeDamage, @PlayerTakeDamage);
-	g_Hooks.RegisterHook(Hooks::Monster::MonsterTakeDamage, @MonsterTakeDamage);
 	g_Hooks.RegisterHook(Hooks::Weapon::WeaponPrimaryAttack, @WeaponPrimaryAttack);
+	g_Hooks.RegisterHook(Hooks::Weapon::WeaponSecondaryAttack, @WeaponSecondaryAttack);
+	g_Hooks.RegisterHook(Hooks::PickupObject::Collected, @CollectSatchel);
+
+	g_Hooks.RegisterHook(Hooks::Monster::MonsterTakeDamage, @MonsterTakeDamage);
 
 	@cvar_enabled = CCVar("enabled", 1, "Enable/Disable friendly fire plugin", ConCommandFlag::AdminOnly);
 
@@ -34,17 +55,83 @@ void PluginInit() {
 }
 
 // Hooks
-HookReturnCode WeaponPrimaryAttack(CBasePlayer@ pPlayer, CBasePlayerWeapon@ wep) {
-	if (cvar_enabled.GetInt() != 1) return HOOK_CONTINUE;
 
-	CBaseEntity@ foundEntity = g_EntityFuncs.FindEntityByClassname(null, "rpg_rocket");
-	if (foundEntity !is null){
-		trackedEntities.insertLast(foundEntity.entindex());
-		trackedEntitiesPosition.insertLast(foundEntity.GetOrigin());
-		trackedEntitiesOwner.insertLast(pPlayer.entindex());
-		trackedEntitiesType.insertLast("RPG");
+//Can probably run this on a timer instead 
+HookReturnCode WeaponPrimaryAttack( CBasePlayer@ pPlayer, CBasePlayerWeapon@ pWeapon )
+{
+
+    if( cvar_enabled.GetInt() != 1 )
+        return HOOK_CONTINUE;
+
+    CBaseEntity@ pEntity = null;
+    while( (@pEntity = g_EntityFuncs.FindEntityByClassname(pEntity, "*")) !is null )
+    {
+
+		CBaseEntity@ owner = g_EntityFuncs.Instance(pEntity.pev.owner);
+
+		if (owner != null && owner.IsPlayer() && owner.entindex() == pPlayer.entindex()) {
+			if (trackedEntities.find(pEntity.entindex()) == -1 && pEntity.IsInWorld() && pEntity.GetClassname().Find("weapon_") != 0){
+				
+				if (ExplosiveDamges.exists(pEntity.GetClassname())) {
+
+				string className = pEntity.GetClassname();
+
+				if (className == "bolt") {
+					if (pWeapon.m_fInZoom) {
+						continue;
+					} 
+				}
+				
+				trackedEntities.insertLast(pEntity.entindex());
+				trackedEntitiesPosition.insertLast(pEntity.GetOrigin());
+				trackedEntitiesOwner.insertLast(pPlayer.entindex());
+				trackedEntitiesType.insertLast(className);
+
+				} else {
+					//g_PlayerFuncs.ClientPrintAll(HUD_PRINTTALK, pEntity.GetClassname());
+				}
+
+			}
+		}
+    }
+
+    return HOOK_CONTINUE;
+}
+
+
+HookReturnCode WeaponSecondaryAttack( CBasePlayer@ pPlayer, CBasePlayerWeapon@ pWeapon )
+{
+    WeaponPrimaryAttack(pPlayer, pWeapon);
+    return HOOK_CONTINUE;
+}
+
+HookReturnCode CollectSatchel( CBaseEntity@ pPickup, CBaseEntity@ pOther )
+{
+	//if we are not picking up a satchel
+	if (pPickup.GetClassname() != "weapon_satchel" || !pOther.IsPlayer()) return HOOK_CONTINUE;
+
+	int index = -1;
+	float maxDistance = 100;
+
+	for (int i = int(trackedEntities.length()) - 1; i >= 0; --i) {
+		if (i >= int(trackedEntities.length())) continue;
+			if (trackedEntitiesOwner[i] == pOther.entindex()) {
+			float distance = (trackedEntitiesPosition[i] - pPickup.GetOrigin()).Length();
+			if (distance < maxDistance) {
+				index = i;
+				maxDistance = distance;
+			}
+		}
+
 	}
-	return HOOK_CONTINUE;
+
+	if (index != -1) {
+		trackedEntities.removeAt(index);
+		trackedEntitiesPosition.removeAt(index);    
+		trackedEntitiesOwner.removeAt(index);
+		trackedEntitiesType.removeAt(index);
+	}
+    return HOOK_CONTINUE;
 }
 
 HookReturnCode MonsterTakeDamage( DamageInfo@ pDamageInfo ) {
@@ -78,6 +165,8 @@ HookReturnCode PlayerTakeDamage( DamageInfo@ pDamageInfo ) {
 	CBaseEntity@ inflictor  = pDamageInfo.pInflictor;
 	string steamId = g_EngineFuncs.GetPlayerAuthId(plr.edict());
 		
+	if (attacker.entindex() == plr.entindex() || inflictor.entindex() == plr.entindex()) return HOOK_CONTINUE;
+
 	//Being attacked by another player on the same team
 	if(cvar_player.GetFloat() != 0.0 && attacker.IsPlayer() && 
 	attacker.Classify() == plr.Classify()){
@@ -108,7 +197,6 @@ HookReturnCode PlayerTakeDamage( DamageInfo@ pDamageInfo ) {
 }
 
 
-// Main Functions
 void resetGlobals() {
 	if (g_npcKillInterval !is null)  g_Scheduler.RemoveTimer(g_npcKillInterval); 
 	@g_npcKillInterval = g_Scheduler.SetInterval("npc_kill", 1);
@@ -131,19 +219,13 @@ void MapInit(){
 
 void AddClassToTrackEntities(string ClassName, string Type){
 	CBaseEntity@ foundEntity = null;
+
 	while( ( @foundEntity = g_EntityFuncs.FindEntityByClassname( foundEntity, ClassName ) ) !is null ){
-		bool add = true;
-		for (uint i = 0; i < trackedEntities.length(); ++i) {
-			if (trackedEntities[i] == foundEntity.entindex()) {
-				add = false;
-				break;
-			}
-		}
-		
-		if (add) {
+		if (trackedEntities.find(foundEntity.entindex()) == -1) {
 			EHandle playerHandle = g_EntityFuncs.Instance(foundEntity.pev.owner);
 			CBaseEntity@ ownerEntity = playerHandle.GetEntity();
 			if (ownerEntity !is null && ownerEntity.IsPlayer()){
+
 				trackedEntities.insertLast(foundEntity.entindex());
 				trackedEntitiesPosition.insertLast(foundEntity.GetOrigin());
 				trackedEntitiesOwner.insertLast(ownerEntity.entindex());
@@ -159,9 +241,9 @@ void TrackEntities()
 
 	if (cvar_enabled.GetInt() != 1 || cvar_explosive.GetFloat() == 0.0) return;
 
+	//Grenades are tracked seperately as they have a long warmup before throwing after clicking
     AddClassToTrackEntities("grenade", "grenade");
-    AddClassToTrackEntities("monster_satchel", "satchel");
-    AddClassToTrackEntities("monster_tripmine", "tripmine");
+    AddClassToTrackEntities("displacer_portal", "displacer_portal");
 
     //Work through tracked entities
     for (int i = int(trackedEntities.length()) - 1; i >= 0; --i) {
@@ -187,42 +269,22 @@ void TrackEntities()
             trackedEntitiesOwner.removeAt(i);
             trackedEntitiesType.removeAt(i);
 
-            CBaseEntity@ pEntity = null;
-            while((@pEntity = g_EntityFuncs.FindEntityInSphere(pEntity, explosionPos, 1000, "*", "classname")) !is null) {
-                //Another Player
-                if ((pEntity.IsPlayer() && pEntity.entindex() != ownerId) 
-                    //Player NPC Ally
-                    || (!pEntity.IsPlayer() && pEntity.IsPlayerAlly())) {
-
-                    float distance = pEntity.GetOrigin().opSub(explosionPos).Length();
-                    distance = distance * distance;
-                    CBaseEntity@ friendlyNPCEntity = getFriendlyNPC(explosionPos);
-                    CBaseMonster@ friendlyNPCMonster = cast<CBaseMonster@>(friendlyNPCEntity);
-                    
-                    edict_t@ ownerEdict = g_EntityFuncs.IndexEnt(ownerId);
-                    if (ownerEdict !is null) {
-                        EHandle entityOwnerHandle = g_EntityFuncs.Instance(ownerEdict);      
-                        CBaseEntity@ ownerEntity = entityOwnerHandle.GetEntity();
-                        CBasePlayer@ plr = cast<CBasePlayer@>(ownerEntity);
-                        friendlyNPCMonster.m_FormattedName = "player (" + plr.pev.netname + ") using " + entityType;
-                    } else {
-                        friendlyNPCMonster.m_FormattedName = "explosion";                    
-                    }
-                    
-                    TraceResult tr;
-                    float dmg = 1000000 / distance;
-                    g_Utility.TraceLine(explosionPos, pEntity.GetOrigin(), dont_ignore_monsters, pEntity.edict(), tr);
-					dmg = dmg * tr.flFraction * cvar_explosive.GetFloat();
-
-					if (!pEntity.IsPlayer()) {
-						dmg = dmg * cvar_npc.GetFloat();
-					} else {
-						dmg = dmg * cvar_player.GetFloat();
-					}
-
-                    pEntity.TakeDamage(friendlyNPCEntity.pev, friendlyNPCEntity.pev, dmg, DMG_BLAST);
-                }
-            }
+			CBaseEntity@ friendlyNPCEntity = getFriendlyNPC(explosionPos);
+			CBaseMonster@ friendlyNPCMonster = cast<CBaseMonster@>(friendlyNPCEntity);
+			edict_t@ ownerEdict = g_EntityFuncs.IndexEnt(ownerId);
+			if (ownerEdict !is null) {
+				EHandle entityOwnerHandle = g_EntityFuncs.Instance(ownerEdict);      
+				CBaseEntity@ ownerEntity = entityOwnerHandle.GetEntity();
+				CBasePlayer@ plr = cast<CBasePlayer@>(ownerEntity);
+				friendlyNPCMonster.m_FormattedName = "player (" + plr.pev.netname + ") using " + entityType;
+			} else {
+				friendlyNPCMonster.m_FormattedName = "explosion";                    
+			}
+	
+			if (ExplosiveDamges.exists(entityType)) {
+				int dmg = int(ExplosiveDamges[entityType]);
+				RadiusDamage (ownerEdict, explosionPos,friendlyNPCEntity.pev, friendlyNPCEntity.pev, dmg , dmg * 2.5, CLASS_NONE, DMG_BLAST );
+			}
         }
     }
 }
@@ -246,7 +308,8 @@ CBaseEntity@ getFriendlyNPC(Vector pos) {
         friendlyNPCHandle = EHandle( pEntity );
         return @pEntity;
     }
-  return null;
+
+	return null;
 }
 
 void npc_kill() {
@@ -259,4 +322,84 @@ void npc_kill() {
 
 	g_EngineFuncs.ServerCommand( "mp_npckill 1\n");
 	g_EngineFuncs.ServerExecute();
+}
+
+
+void RadiusDamage(edict_t@ ownerEdict, Vector vecSrc, entvars_t@ pevInflictor, entvars_t@ pevAttacker, float flDamage, float flRadius, int iClassIgnore, int bitsDamageType ) {
+	
+	int classification = -1;
+	int ownerIndex = -1;
+
+	if (ownerEdict !is null) {
+			EHandle entityOwnerHandle = g_EntityFuncs.Instance(ownerEdict);      
+			CBaseEntity@ ownerEntity = entityOwnerHandle.GetEntity();
+			classification = ownerEntity.Classify();
+			ownerIndex = ownerEntity.entindex();
+	}
+
+	CBaseEntity@ pEntity;
+	TraceResult	tr;
+	float		flAdjustedDamage, falloff;
+	Vector		vecSpot;
+
+	if ( flRadius != 0 )
+		falloff = flDamage / flRadius;
+	else
+		falloff = 1.0;
+
+
+	bool bInWater = (g_EngineFuncs.PointContents( vecSrc ) == CONTENTS_WATER);
+
+	vecSrc.z += 1;// in case grenade is lying on the ground
+
+	// iterate on all entities in the vicinity.
+    while( (@pEntity = g_EntityFuncs.FindEntityInSphere(pEntity, vecSrc, flRadius, "player", "classname")) !is null )
+	{
+	
+		if ( !pEntity.IsPlayer() || pEntity.entindex() == ownerIndex || pEntity.Classify() != classification)
+		{
+			continue;
+		}
+
+		// blast's don't tavel into or out of water
+		if (bInWater && pEntity.pev.waterlevel == 0)
+			continue;
+		if (!bInWater && pEntity.pev.waterlevel == 3)
+			continue;
+
+		vecSpot = pEntity.BodyTarget( vecSrc );
+		
+		g_Utility.TraceLine ( vecSrc, vecSpot, dont_ignore_monsters, g_EntityFuncs.Instance(pevInflictor).edict(), tr );
+
+		if ( tr.flFraction == 1.0 || g_EntityFuncs.Instance(tr.pHit).entindex() == pEntity.entindex() )
+		{// the explosion can 'see' this entity, so hurt them!
+			if (tr.fStartSolid != 0)
+			{
+				// if we're stuck inside them, fixup the position and distance
+				tr.vecEndPos = vecSrc;
+				tr.flFraction = 0.0;
+			}
+			
+			// decrease damage for an ent that's farther from the bomb.
+			flAdjustedDamage = ( vecSrc - tr.vecEndPos ).Length() * falloff;
+			flAdjustedDamage = flDamage - flAdjustedDamage;
+		
+			if ( flAdjustedDamage < 0 )
+				flAdjustedDamage = 0;
+			
+			
+			// ALERT( at_console, "hit %s\n", STRING( pEntity->pev->classname ) );
+			if (tr.flFraction != 1.0)
+			{
+				g_WeaponFuncs.ClearMultiDamage( );
+				pEntity.TraceAttack( pevInflictor, flAdjustedDamage, (tr.vecEndPos.opSub(vecSrc)).Normalize( ), tr, bitsDamageType );
+				g_WeaponFuncs.ApplyMultiDamage( pevInflictor, pevAttacker );
+			}
+			else
+			{
+				pEntity.TakeDamage ( pevInflictor, pevAttacker, flAdjustedDamage, bitsDamageType );
+			}			
+		}
+		
+	}
 }
