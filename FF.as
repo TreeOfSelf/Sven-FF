@@ -17,11 +17,7 @@ CCVar@ cvar_explosive;
 
 dictionary ExplosiveDamges =
 {
-    { "grenade", 100 },
-    { "monster_satchel", 150 },
-    { "monster_tripmine", 150 },
     { "bolt", 40 },
-    { "snark", 15 },
 	{ "displacer_portal", 300}
 };
 
@@ -33,6 +29,10 @@ void PluginInit() {
 
 	ExplosiveDamges['snark'] = (skillValue == 1 ? 5 : (skillValue == 2 ? 6 : 15));
 	ExplosiveDamges['sporegrenade'] = (skillValue == 1 ? 120 : (skillValue == 2 ? 120 : 200));
+	ExplosiveDamges['rpg_rocket'] = (skillValue == 1 ? 150 : (skillValue == 2 ? 150 : 180));
+	ExplosiveDamges['grenade'] = (skillValue == 1 ? 110 : (skillValue == 2 ? 120 : 165));
+	ExplosiveDamges['monster_tripmine'] = (skillValue == 1 ? 150 : (skillValue == 2 ? 150 : 225));
+	ExplosiveDamges['monster_satchel'] = (skillValue == 1 ? 160 : (skillValue == 2 ? 160 : 225));
 
 	g_Module.ScriptInfo.SetAuthor("Sebastian");
 	g_Module.ScriptInfo.SetContactInfo("https://github.com/TreeOfSelf/Sven-FF");
