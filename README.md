@@ -6,8 +6,9 @@ With this plugin you can:
 - Allow players to damage friendly NPCs
 - Allow friendly NPCs to damage players
 - Allow friendly players to damage each other
-- Even works with explosives like grenades and RPG rockets!
+- Even works with explosives like grenades, snarks, rpg_rockets, and more! 
 - Do it all without messing with player teams and possibly breaking maps
+- Accurate damage calculations using Half Life source code
 
 You can configure the exact damage scale as well, even negative numbers can work to make it so the damage heals them (I don't know why you would want this).
 
