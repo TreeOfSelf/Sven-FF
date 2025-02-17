@@ -38,7 +38,7 @@ void PluginInit() {
 
 	for (int i = 1; i <= g_Engine.maxClients; i++) {
 		CBasePlayer@ plr = g_PlayerFuncs.FindPlayerByIndex(i);
-		if (plr !is null ){
+		if (plr !is null ) {
 			Observer@ obs = plr.GetObserver();
 			obs.StopObserver(true);
 		} 
@@ -57,7 +57,7 @@ HookReturnCode MapChange( const string& in szNextMap ) {
 HookReturnCode PlayerSpawn( CBasePlayer@ pPlayer) {
     string steamId = g_EngineFuncs.GetPlayerAuthId(pPlayer.edict());
     
-    if(survivalActive && g_SurvivalMode.IsEnabled()==false && cvar_enabled.GetInt() == 1){
+    if(survivalActive && g_SurvivalMode.IsEnabled()==false && cvar_enabled.GetInt() == 1) {
         if (cvar_lateSpawn.GetInt() == 1 && trackedSpawned.find(steamId) < 0) {
             trackedSpawned.insertLast(steamId);        
             return HOOK_CONTINUE;        
@@ -81,14 +81,14 @@ HookReturnCode PlayerKilled( CBasePlayer@ pPlayer, CBaseEntity@ pAttacker, int i
 	return HOOK_HANDLED;
 }
 
-HookReturnCode ClientPutInServer(CBasePlayer@ plr){
+HookReturnCode ClientPutInServer(CBasePlayer@ plr) {
 	if (resetTimerStopped && survivalActive && checkPlayersDead()) {
 		@g_pThinkFunc = g_Scheduler.SetInterval("mapChanger", cvar_resetTime.GetInt());
 	}
 	return HOOK_CONTINUE;
 }
 
-HookReturnCode ClientDisconnect(CBasePlayer@ plr){
+HookReturnCode ClientDisconnect(CBasePlayer@ plr) {
     if (resetTimerStopped && survivalActive && checkPlayersDead()) {
         @g_pThinkFunc = g_Scheduler.SetInterval("mapChanger", cvar_resetTime.GetInt());
     }
@@ -97,36 +97,45 @@ HookReturnCode ClientDisconnect(CBasePlayer@ plr){
 
 
 // Main Functions
-void MapInit(){
+void MapInit() {
 	g_Game.PrecacheMonster( "monster_gman", true );
 	trackedSpawned.resize(0);
 }
 
-void displaySurvival(){
-	if(g_SurvivalMode.IsEnabled()==false &&  cvar_enabled.GetInt() == 1){
-		if(currentTime<cvar_timer.GetInt()){
+void displaySurvival() {
+	if(g_SurvivalMode.IsEnabled()==false &&  cvar_enabled.GetInt() == 1) {
+		if(currentTime<cvar_timer.GetInt()) {
 			int oucurrentTime = cvar_timer.GetInt() - currentTime;
 			for (int i = 1; i <= g_Engine.maxClients; i++) {
 				CBasePlayer@ plr = g_PlayerFuncs.FindPlayerByIndex(i);
-				if (plr !is null){
+				if (plr !is null) {
 					g_EngineFuncs.ClientPrintf(plr, print_center, "Survival mode starting in "+string(oucurrentTime)+" seconds");
 				} 
 			}
 		}
-		if(currentTime == cvar_timer.GetInt()){
+		if(currentTime == cvar_timer.GetInt()) {
 			g_PlayerFuncs.ClientPrintAll(HUD_PRINTTALK, "Survival mode now active. No more respawning allowed.");
 			survivalActive = true;
 			if (resetTimerStopped && survivalActive  && checkPlayersDead()) {
 				@g_pThinkFunc = g_Scheduler.SetInterval("mapChanger", cvar_resetTime.GetInt());
+			}
+			for (int i = 1; i <= g_Engine.maxClients; i++) {
+				CBasePlayer@ plr = g_PlayerFuncs.FindPlayerByIndex(i);
+				if (plr !is null && plr.IsAlive()==true && plr.IsConnected()) {
+					string steamId = g_EngineFuncs.GetPlayerAuthId(plr.edict());
+					if (cvar_lateSpawn.GetInt() == 1 && trackedSpawned.find(steamId) < 0) {
+						trackedSpawned.insertLast(steamId);        
+					}
+				}
 			}
 		}
 	}
 	currentTime+=1;
 }
 
-void mapChanger(){
-	if(g_SurvivalMode.IsEnabled()==false &&  cvar_enabled.GetInt() == 1 && currentTime >= cvar_timer.GetInt()){
-		if(checkPlayersDead()){
+void mapChanger() {
+	if(g_SurvivalMode.IsEnabled()==false &&  cvar_enabled.GetInt() == 1 && currentTime >= cvar_timer.GetInt()) {
+		if(checkPlayersDead()) {
 			g_EngineFuncs.ChangeLevel(string(g_Engine.mapname));
 		}
 	}
@@ -134,19 +143,19 @@ void mapChanger(){
 	resetTimerStopped = true;
 }
 
-bool checkPlayersDead(){
+bool checkPlayersDead() {
 	int reset = 1;
 	int playerHit = 0;
 		for (int i = 1; i <= g_Engine.maxClients; i++) {
 			CBasePlayer@ plr = g_PlayerFuncs.FindPlayerByIndex(i);
-			if (plr !is null && plr.IsAlive()==true && plr.IsConnected()){
+			if (plr !is null && plr.IsAlive()==true && plr.IsConnected()) {
 				reset=0;
 			} 
-			if (plr !is null){
+			if (plr !is null) {
 				playerHit=1;
 			}
 		}
-	if(reset==1 && playerHit==1){
+	if(reset==1 && playerHit==1) {
 		return(true);
 	}
 	return(false);
