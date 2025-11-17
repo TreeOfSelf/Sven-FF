@@ -9,16 +9,21 @@ array<Vector> trackedEntitiesPosition;
 array<int> trackedEntitiesOwner;
 array<string> trackedEntitiesType;
 
+// Track last medkit heal time per player (entindex -> timestamp)
+dictionary lastMedkitHealTime;
+
 CCVar@ cvar_enabled;
 CCVar@ cvar_player;
 CCVar@ cvar_npc;
 CCVar@ cvar_npcToPlayer;
 CCVar@ cvar_explosive;
 
+// Damage values for various explosives (from Half-Life Opposing Force source code)
+// These values match the Opposing Force multiplayer damage values exactly
 dictionary ExplosiveDamges =
 {
-    { "bolt", 40 },
-	{ "displacer_portal", 300}
+    { "bolt", 50 },  // Crossbow bolt (sk_plr_xbow_bolt_monster)
+	{ "displacer_portal", 300}  // Displacer portal explosion
 };
 
 
@@ -27,12 +32,13 @@ void PluginInit() {
 
 	float skillValue = g_EngineFuncs.CVarGetFloat("skill");
 
-	ExplosiveDamges['snark'] = (skillValue == 1 ? 5 : (skillValue == 2 ? 6 : 15));
-	ExplosiveDamges['sporegrenade'] = (skillValue == 1 ? 120 : (skillValue == 2 ? 120 : 200));
-	ExplosiveDamges['rpg_rocket'] = (skillValue == 1 ? 150 : (skillValue == 2 ? 150 : 180));
-	ExplosiveDamges['grenade'] = (skillValue == 1 ? 110 : (skillValue == 2 ? 120 : 165));
-	ExplosiveDamges['monster_tripmine'] = (skillValue == 1 ? 150 : (skillValue == 2 ? 150 : 225));
-	ExplosiveDamges['monster_satchel'] = (skillValue == 1 ? 160 : (skillValue == 2 ? 160 : 225));
+	// Exact values from Opposing Force multiplayer source (multiplay_gamerules.cpp)
+	ExplosiveDamges['snark'] = 10;  // plrDmgHornet (snark explosion uses hornet damage)
+	ExplosiveDamges['sporegrenade'] = 50;  // plrDmgSpore
+	ExplosiveDamges['rpg_rocket'] = 120;  // plrDmgRPG
+	ExplosiveDamges['grenade'] = 100;  // plrDmgHandGrenade
+	ExplosiveDamges['monster_tripmine'] = 150;  // plrDmgTripmine
+	ExplosiveDamges['monster_satchel'] = 120;  // plrDmgSatchel
 
 	g_Module.ScriptInfo.SetAuthor("Sebastian");
 	g_Module.ScriptInfo.SetContactInfo("https://github.com/TreeOfSelf/Sven-FF");
@@ -63,6 +69,11 @@ HookReturnCode WeaponPrimaryAttack( CBasePlayer@ pPlayer, CBasePlayerWeapon@ pWe
     if( cvar_enabled.GetInt() != 1 )
         return HOOK_CONTINUE;
 
+    // Track medkit usage for 2s FF immunity
+    if (pWeapon !is null && pWeapon.GetClassname() == "weapon_medkit") {
+        lastMedkitHealTime[string(pPlayer.entindex())] = g_Engine.time;
+    }
+
     CBaseEntity@ pEntity = null;
     while( (@pEntity = g_EntityFuncs.FindEntityByClassname(pEntity, "*")) !is null )
     {
@@ -71,7 +82,7 @@ HookReturnCode WeaponPrimaryAttack( CBasePlayer@ pPlayer, CBasePlayerWeapon@ pWe
 
 		if (owner != null && owner.IsPlayer() && owner.entindex() == pPlayer.entindex()) {
 			if (trackedEntities.find(pEntity.entindex()) == -1 && pEntity.IsInWorld() && pEntity.GetClassname().Find("weapon_") != 0){
-				
+
 				if (ExplosiveDamges.exists(pEntity.GetClassname())) {
 
 				string className = pEntity.GetClassname();
@@ -79,9 +90,9 @@ HookReturnCode WeaponPrimaryAttack( CBasePlayer@ pPlayer, CBasePlayerWeapon@ pWe
 				if (className == "bolt") {
 					if (pWeapon.m_fInZoom) {
 						continue;
-					} 
+					}
 				}
-				
+
 				trackedEntities.insertLast(pEntity.entindex());
 				trackedEntitiesPosition.insertLast(pEntity.GetOrigin());
 				trackedEntitiesOwner.insertLast(pPlayer.entindex());
@@ -168,11 +179,22 @@ HookReturnCode PlayerTakeDamage( DamageInfo@ pDamageInfo ) {
 	if (attacker.entindex() == plr.entindex() || inflictor.entindex() == plr.entindex()) return HOOK_CONTINUE;
 
 	//Being attacked by another player on the same team
-	if(cvar_player.GetFloat() != 0.0 && attacker.IsPlayer() && 
+	if(cvar_player.GetFloat() != 0.0 && attacker.IsPlayer() &&
 	attacker.Classify() == plr.Classify()){
+		CBasePlayer@ attackerPlayer = cast<CBasePlayer@>( attacker );
+
+		// Check if attacker used medkit within last 2 seconds - give them FF immunity
+		string attackerKey = string(attackerPlayer.entindex());
+		if (lastMedkitHealTime.exists(attackerKey)) {
+			float lastHealTime = float(lastMedkitHealTime[attackerKey]);
+			if (g_Engine.time - lastHealTime < 2.0) {
+				// Medkit heal cooldown active - no FF damage
+				return HOOK_CONTINUE;
+			}
+		}
+
 		CBaseEntity@ friendlyNPCEntity =  getFriendlyNPC(plr.GetOrigin());
 		CBaseMonster@ friendlyNPCMonster = cast<CBaseMonster@>(friendlyNPCEntity);
-		CBasePlayer@ attackerPlayer = cast<CBasePlayer@>( attacker );
 
 		friendlyNPCMonster.m_FormattedName = "player ("+attackerPlayer.pev.netname+") using "+attackerPlayer.m_hActiveItem.GetEntity().GetClassname();
 		plr.TakeDamage(inflictor.pev,friendlyNPCEntity.pev,pDamageInfo.flDamage * cvar_player.GetFloat(),pDamageInfo.bitsDamageType);
@@ -224,13 +246,14 @@ void AddClassToTrackEntities(string ClassName, string Type){
 		if (trackedEntities.find(foundEntity.entindex()) == -1) {
 			EHandle playerHandle = g_EntityFuncs.Instance(foundEntity.pev.owner);
 			CBaseEntity@ ownerEntity = playerHandle.GetEntity();
-			if (ownerEntity !is null && ownerEntity.IsPlayer()){
+			// Track explosives from both players AND friendly NPCs
+			if (ownerEntity !is null && (ownerEntity.IsPlayer() || ownerEntity.IsPlayerAlly())){
 
 				trackedEntities.insertLast(foundEntity.entindex());
 				trackedEntitiesPosition.insertLast(foundEntity.GetOrigin());
 				trackedEntitiesOwner.insertLast(ownerEntity.entindex());
-				trackedEntitiesType.insertLast(Type);			
-			}			
+				trackedEntitiesType.insertLast(Type);
+			}
 		}
 	}
 }
@@ -273,17 +296,29 @@ void TrackEntities()
 			CBaseMonster@ friendlyNPCMonster = cast<CBaseMonster@>(friendlyNPCEntity);
 			edict_t@ ownerEdict = g_EntityFuncs.IndexEnt(ownerId);
 			if (ownerEdict !is null) {
-				EHandle entityOwnerHandle = g_EntityFuncs.Instance(ownerEdict);      
+				EHandle entityOwnerHandle = g_EntityFuncs.Instance(ownerEdict);
 				CBaseEntity@ ownerEntity = entityOwnerHandle.GetEntity();
-				CBasePlayer@ plr = cast<CBasePlayer@>(ownerEntity);
-				friendlyNPCMonster.m_FormattedName = "player (" + plr.pev.netname + ") using " + entityType;
+
+				// Check if owner is a player or NPC
+				if (ownerEntity.IsPlayer()) {
+					CBasePlayer@ plr = cast<CBasePlayer@>(ownerEntity);
+					friendlyNPCMonster.m_FormattedName = "player (" + plr.pev.netname + ") using " + entityType;
+				} else if (ownerEntity.IsPlayerAlly()) {
+					CBaseMonster@ npc = cast<CBaseMonster@>(ownerEntity);
+					friendlyNPCMonster.m_FormattedName = "friendly NPC (" + npc.m_FormattedName + ") using " + entityType;
+				} else {
+					friendlyNPCMonster.m_FormattedName = "explosion";
+				}
 			} else {
-				friendlyNPCMonster.m_FormattedName = "explosion";                    
+				friendlyNPCMonster.m_FormattedName = "explosion";
 			}
 	
 			if (ExplosiveDamges.exists(entityType)) {
 				int dmg = int(ExplosiveDamges[entityType]);
-				RadiusDamage (ownerEdict, explosionPos,friendlyNPCEntity.pev, friendlyNPCEntity.pev, dmg , dmg * 2.5, CLASS_NONE, DMG_BLAST );
+				// Spore grenades use DMG_GENERIC (exact Valve implementation from sporegrenade.cpp:283)
+				// All other explosives use DMG_BLAST
+				int damageType = (entityType == "sporegrenade") ? DMG_GENERIC : DMG_BLAST;
+				RadiusDamage (ownerEdict, explosionPos,friendlyNPCEntity.pev, friendlyNPCEntity.pev, dmg , dmg * 2.5, CLASS_NONE, damageType );
 			}
         }
     }
