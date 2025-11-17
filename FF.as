@@ -9,6 +9,9 @@ array<Vector> trackedEntitiesPosition;
 array<int> trackedEntitiesOwner;
 array<string> trackedEntitiesType;
 
+// Track last medkit heal time per player (entindex -> timestamp)
+dictionary lastMedkitHealTime;
+
 CCVar@ cvar_enabled;
 CCVar@ cvar_player;
 CCVar@ cvar_npc;
@@ -65,6 +68,11 @@ HookReturnCode WeaponPrimaryAttack( CBasePlayer@ pPlayer, CBasePlayerWeapon@ pWe
 
     if( cvar_enabled.GetInt() != 1 )
         return HOOK_CONTINUE;
+
+    // Track medkit usage for 2s FF immunity
+    if (pWeapon !is null && pWeapon.GetClassname() == "weapon_medkit") {
+        lastMedkitHealTime[string(pPlayer.entindex())] = g_Engine.time;
+    }
 
     CBaseEntity@ pEntity = null;
     while( (@pEntity = g_EntityFuncs.FindEntityByClassname(pEntity, "*")) !is null )
@@ -171,11 +179,22 @@ HookReturnCode PlayerTakeDamage( DamageInfo@ pDamageInfo ) {
 	if (attacker.entindex() == plr.entindex() || inflictor.entindex() == plr.entindex()) return HOOK_CONTINUE;
 
 	//Being attacked by another player on the same team
-	if(cvar_player.GetFloat() != 0.0 && attacker.IsPlayer() && 
+	if(cvar_player.GetFloat() != 0.0 && attacker.IsPlayer() &&
 	attacker.Classify() == plr.Classify()){
+		CBasePlayer@ attackerPlayer = cast<CBasePlayer@>( attacker );
+
+		// Check if attacker used medkit within last 2 seconds - give them FF immunity
+		string attackerKey = string(attackerPlayer.entindex());
+		if (lastMedkitHealTime.exists(attackerKey)) {
+			float lastHealTime = float(lastMedkitHealTime[attackerKey]);
+			if (g_Engine.time - lastHealTime < 2.0) {
+				// Medkit heal cooldown active - no FF damage
+				return HOOK_CONTINUE;
+			}
+		}
+
 		CBaseEntity@ friendlyNPCEntity =  getFriendlyNPC(plr.GetOrigin());
 		CBaseMonster@ friendlyNPCMonster = cast<CBaseMonster@>(friendlyNPCEntity);
-		CBasePlayer@ attackerPlayer = cast<CBasePlayer@>( attacker );
 
 		friendlyNPCMonster.m_FormattedName = "player ("+attackerPlayer.pev.netname+") using "+attackerPlayer.m_hActiveItem.GetEntity().GetClassname();
 		plr.TakeDamage(inflictor.pev,friendlyNPCEntity.pev,pDamageInfo.flDamage * cvar_player.GetFloat(),pDamageInfo.bitsDamageType);
