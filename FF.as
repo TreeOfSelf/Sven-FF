@@ -15,12 +15,12 @@ CCVar@ cvar_npc;
 CCVar@ cvar_npcToPlayer;
 CCVar@ cvar_explosive;
 
-// Damage values for various explosives
-// Spore grenades use DMG_NERVEGAS for poison damage (5 dmg/sec for 16 sec based on Half-Life source)
+// Damage values for various explosives (from Half-Life Opposing Force source code)
+// These values match the Opposing Force multiplayer damage values exactly
 dictionary ExplosiveDamges =
 {
-    { "bolt", 40 },
-	{ "displacer_portal", 300}
+    { "bolt", 50 },  // Crossbow bolt (sk_plr_xbow_bolt_monster)
+	{ "displacer_portal", 300}  // Displacer portal explosion
 };
 
 
@@ -29,12 +29,13 @@ void PluginInit() {
 
 	float skillValue = g_EngineFuncs.CVarGetFloat("skill");
 
-	ExplosiveDamges['snark'] = (skillValue == 1 ? 5 : (skillValue == 2 ? 6 : 15));
-	ExplosiveDamges['sporegrenade'] = (skillValue == 1 ? 120 : (skillValue == 2 ? 120 : 200));
-	ExplosiveDamges['rpg_rocket'] = (skillValue == 1 ? 150 : (skillValue == 2 ? 150 : 180));
-	ExplosiveDamges['grenade'] = (skillValue == 1 ? 110 : (skillValue == 2 ? 120 : 165));
-	ExplosiveDamges['monster_tripmine'] = (skillValue == 1 ? 150 : (skillValue == 2 ? 150 : 225));
-	ExplosiveDamges['monster_satchel'] = (skillValue == 1 ? 160 : (skillValue == 2 ? 160 : 225));
+	// Exact values from Opposing Force multiplayer source (multiplay_gamerules.cpp)
+	ExplosiveDamges['snark'] = 10;  // plrDmgHornet (snark explosion uses hornet damage)
+	ExplosiveDamges['sporegrenade'] = 50;  // plrDmgSpore
+	ExplosiveDamges['rpg_rocket'] = 120;  // plrDmgRPG
+	ExplosiveDamges['grenade'] = 100;  // plrDmgHandGrenade
+	ExplosiveDamges['monster_tripmine'] = 150;  // plrDmgTripmine
+	ExplosiveDamges['monster_satchel'] = 120;  // plrDmgSatchel
 
 	g_Module.ScriptInfo.SetAuthor("Sebastian");
 	g_Module.ScriptInfo.SetContactInfo("https://github.com/TreeOfSelf/Sven-FF");
@@ -285,8 +286,9 @@ void TrackEntities()
 	
 			if (ExplosiveDamges.exists(entityType)) {
 				int dmg = int(ExplosiveDamges[entityType]);
-				// Use poison damage for spore grenades, blast damage for others
-				int damageType = (entityType == "sporegrenade") ? DMG_NERVEGAS : DMG_BLAST;
+				// Spore grenades use DMG_GENERIC (exact Valve implementation from sporegrenade.cpp:283)
+				// All other explosives use DMG_BLAST
+				int damageType = (entityType == "sporegrenade") ? DMG_GENERIC : DMG_BLAST;
 				RadiusDamage (ownerEdict, explosionPos,friendlyNPCEntity.pev, friendlyNPCEntity.pev, dmg , dmg * 2.5, CLASS_NONE, damageType );
 			}
         }
