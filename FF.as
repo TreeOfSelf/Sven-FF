@@ -277,12 +277,21 @@ void TrackEntities()
 			CBaseMonster@ friendlyNPCMonster = cast<CBaseMonster@>(friendlyNPCEntity);
 			edict_t@ ownerEdict = g_EntityFuncs.IndexEnt(ownerId);
 			if (ownerEdict !is null) {
-				EHandle entityOwnerHandle = g_EntityFuncs.Instance(ownerEdict);      
+				EHandle entityOwnerHandle = g_EntityFuncs.Instance(ownerEdict);
 				CBaseEntity@ ownerEntity = entityOwnerHandle.GetEntity();
-				CBasePlayer@ plr = cast<CBasePlayer@>(ownerEntity);
-				friendlyNPCMonster.m_FormattedName = "player (" + plr.pev.netname + ") using " + entityType;
+
+				// Check if owner is a player or NPC
+				if (ownerEntity.IsPlayer()) {
+					CBasePlayer@ plr = cast<CBasePlayer@>(ownerEntity);
+					friendlyNPCMonster.m_FormattedName = "player (" + plr.pev.netname + ") using " + entityType;
+				} else if (ownerEntity.IsPlayerAlly()) {
+					CBaseMonster@ npc = cast<CBaseMonster@>(ownerEntity);
+					friendlyNPCMonster.m_FormattedName = "friendly NPC (" + npc.m_FormattedName + ") using " + entityType;
+				} else {
+					friendlyNPCMonster.m_FormattedName = "explosion";
+				}
 			} else {
-				friendlyNPCMonster.m_FormattedName = "explosion";                    
+				friendlyNPCMonster.m_FormattedName = "explosion";
 			}
 	
 			if (ExplosiveDamges.exists(entityType)) {
