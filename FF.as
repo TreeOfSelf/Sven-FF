@@ -15,6 +15,8 @@ CCVar@ cvar_npc;
 CCVar@ cvar_npcToPlayer;
 CCVar@ cvar_explosive;
 
+// Damage values for various explosives
+// Spore grenades use DMG_NERVEGAS for poison damage (5 dmg/sec for 16 sec based on Half-Life source)
 dictionary ExplosiveDamges =
 {
     { "bolt", 40 },
@@ -283,7 +285,9 @@ void TrackEntities()
 	
 			if (ExplosiveDamges.exists(entityType)) {
 				int dmg = int(ExplosiveDamges[entityType]);
-				RadiusDamage (ownerEdict, explosionPos,friendlyNPCEntity.pev, friendlyNPCEntity.pev, dmg , dmg * 2.5, CLASS_NONE, DMG_BLAST );
+				// Use poison damage for spore grenades, blast damage for others
+				int damageType = (entityType == "sporegrenade") ? DMG_NERVEGAS : DMG_BLAST;
+				RadiusDamage (ownerEdict, explosionPos,friendlyNPCEntity.pev, friendlyNPCEntity.pev, dmg , dmg * 2.5, CLASS_NONE, damageType );
 			}
         }
     }
