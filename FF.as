@@ -74,7 +74,7 @@ HookReturnCode WeaponPrimaryAttack( CBasePlayer@ pPlayer, CBasePlayerWeapon@ pWe
 
 		if (owner != null && owner.IsPlayer() && owner.entindex() == pPlayer.entindex()) {
 			if (trackedEntities.find(pEntity.entindex()) == -1 && pEntity.IsInWorld() && pEntity.GetClassname().Find("weapon_") != 0){
-				
+
 				if (ExplosiveDamges.exists(pEntity.GetClassname())) {
 
 				string className = pEntity.GetClassname();
@@ -82,9 +82,9 @@ HookReturnCode WeaponPrimaryAttack( CBasePlayer@ pPlayer, CBasePlayerWeapon@ pWe
 				if (className == "bolt") {
 					if (pWeapon.m_fInZoom) {
 						continue;
-					} 
+					}
 				}
-				
+
 				trackedEntities.insertLast(pEntity.entindex());
 				trackedEntitiesPosition.insertLast(pEntity.GetOrigin());
 				trackedEntitiesOwner.insertLast(pPlayer.entindex());
@@ -227,13 +227,14 @@ void AddClassToTrackEntities(string ClassName, string Type){
 		if (trackedEntities.find(foundEntity.entindex()) == -1) {
 			EHandle playerHandle = g_EntityFuncs.Instance(foundEntity.pev.owner);
 			CBaseEntity@ ownerEntity = playerHandle.GetEntity();
-			if (ownerEntity !is null && ownerEntity.IsPlayer()){
+			// Track explosives from both players AND friendly NPCs
+			if (ownerEntity !is null && (ownerEntity.IsPlayer() || ownerEntity.IsPlayerAlly())){
 
 				trackedEntities.insertLast(foundEntity.entindex());
 				trackedEntitiesPosition.insertLast(foundEntity.GetOrigin());
 				trackedEntitiesOwner.insertLast(ownerEntity.entindex());
-				trackedEntitiesType.insertLast(Type);			
-			}			
+				trackedEntitiesType.insertLast(Type);
+			}
 		}
 	}
 }
