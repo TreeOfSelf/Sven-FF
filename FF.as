@@ -187,7 +187,7 @@ HookReturnCode PlayerTakeDamage( DamageInfo@ pDamageInfo ) {
 		string attackerKey = string(attackerPlayer.entindex());
 		if (lastMedkitHealTime.exists(attackerKey)) {
 			float lastHealTime = float(lastMedkitHealTime[attackerKey]);
-			if (g_Engine.time - lastHealTime < 1.0) {
+			if (g_Engine.time - lastHealTime < 2.0) {
 				// Medkit heal cooldown active - no FF damage
 				return HOOK_CONTINUE;
 			}
