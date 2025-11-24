@@ -100,6 +100,7 @@ HookReturnCode WeaponPrimaryAttack(CBasePlayer @pPlayer, CBasePlayerWeapon @pWea
         if (ExplosiveDamges.exists(pEntity.GetClassname())) {
           string className = pEntity.GetClassname();
 
+          // Special case: zoomed crossbow bolts are hitscan, not projectiles
           if (className == "bolt") {
             if (pWeapon.m_fInZoom) {
               continue;
@@ -256,8 +257,16 @@ void AddClassToTrackEntities(string ClassName, string Type) {
 void TrackEntities() {
   if (cvar_enabled.GetInt() != 1) return;
 
-  // Track all projectile types
+  // Track all projectile types (catches both player & NPC)
+  // NOTE: bolt is tracked in WeaponPrimaryAttack due to zoom check
   AddClassToTrackEntities("grenade", "grenade");
+  AddClassToTrackEntities("rpg_rocket", "rpg_rocket");
+  AddClassToTrackEntities("hvr_rocket", "hvr_rocket");
+  AddClassToTrackEntities("monster_satchel", "monster_satchel");
+  AddClassToTrackEntities("monster_tripmine", "monster_tripmine");
+  AddClassToTrackEntities("snark", "snark");
+  AddClassToTrackEntities("sporegrenade", "sporegrenade");
+  AddClassToTrackEntities("shock_beam", "shock_beam");
   AddClassToTrackEntities("displacer_portal", "displacer_portal");
   AddClassToTrackEntities("squidspit", "squidspit");
   AddClassToTrackEntities("bmortar", "bmortar");
@@ -270,6 +279,7 @@ void TrackEntities() {
   AddClassToTrackEntities("controller_head_ball", "controller_head_ball");
   AddClassToTrackEntities("controller_energy_ball", "controller_energy_ball");
   AddClassToTrackEntities("nihilanth_energy_ball", "nihilanth_energy_ball");
+  AddClassToTrackEntities("garg_stomp", "garg_stomp");
 
   // Work through tracked entities
   for (int i = int(trackedEntities.length()) - 1; i >= 0; --i) {
@@ -333,6 +343,7 @@ void TrackEntities() {
           damageType = int(ExplosiveDamageTypes[entityType]);
         }
         
+        // Use standard GoldSrc formula: radius = damage * 2.5
         RadiusDamage(ownerEdict, explosionPos, friendlyNPCEntity.pev, friendlyNPCEntity.pev, dmg * damageScale, (dmg * damageScale) * 2.5, CLASS_NONE, damageType);
       }
     }
