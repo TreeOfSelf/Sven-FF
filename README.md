@@ -36,6 +36,7 @@ as_command ff.player 1.0
 as_command ff.npc 1.0
 as_command ff.npcToPlayer 1.0
 as_command ff.explosive 1.0
+as_command ff.npcExplosive 1.0
 ```
   
 ## Configs:
@@ -54,6 +55,7 @@ player - (0 - 1) Scale of player to friendly player damage
 npc - (0 - 1) 0-1 Scale of player to friendly npc damage
 npcToPlayer - (0 - 1) Scale of friendly npc to player damage
 explosive - (0 - 1) Scale of explosive damage
+npcExplosive - (0 - 1) Scale of NPC explosive/projectile damage
 ```
 
 ## Support
