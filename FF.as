@@ -21,14 +21,43 @@ CCVar @cvar_npcExplosive;
 
 // Damage values for various explosives - ALL IN ONE PLACE
 dictionary ExplosiveDamges = {
+    // Player weapons
     {"bolt", 50},
-    {"grenade", 100},                // Used by BOTH players AND NPCs
+    {"grenade", 100},                    // Hand grenades (player & NPC)
     {"rpg_rocket", 120},
+    {"hvr_rocket", 120},                 // Apache rockets
     {"monster_satchel", 120},
     {"monster_tripmine", 150},
     {"snark", 10},
     {"sporegrenade", 50},
-    {"displacer_portal", 300}
+    {"displacer_portal", 300},
+    {"shock_beam", int(g_EngineFuncs.CVarGetFloat("sk_plr_shockrifle"))},
+    
+    // NPC projectiles
+    {"squidspit", int(g_EngineFuncs.CVarGetFloat("sk_bullsquid_dmg_spit"))},
+    {"bmortar", 200},                    // Gonarch spit (Big Momma mortar)
+    {"gonomespit", 10},                  // Gonome spit
+    {"pitdronespike", 15},
+    {"hornet", 7},
+    {"playerhornet", 7},
+    {"voltigoreshock", 35},
+    {"kingpin_plasma_ball", 15},
+    {"controller_head_ball", 2},
+    {"controller_energy_ball", 10},
+    {"nihilanth_energy_ball", 30},
+    {"garg_stomp", 50}
+};
+
+// Damage types for specific projectiles
+dictionary ExplosiveDamageTypes = {
+    {"sporegrenade", DMG_ACID | DMG_POISON},
+    {"squidspit", DMG_ACID},
+    {"gonomespit", DMG_ACID},
+    {"shock_beam", DMG_SHOCK | DMG_ALWAYSGIB},
+    {"displacer_portal", DMG_ENERGYBEAM | DMG_ALWAYSGIB},
+    {"voltigoreshock", DMG_SHOCK},
+    {"controller_energy_ball", DMG_ENERGYBEAM},
+    {"nihilanth_energy_ball", DMG_ENERGYBEAM}
 };
 
 // Init
@@ -227,9 +256,20 @@ void AddClassToTrackEntities(string ClassName, string Type) {
 void TrackEntities() {
   if (cvar_enabled.GetInt() != 1) return;
 
-  // Grenades tracked here (used by both players AND NPCs)
+  // Track all projectile types
   AddClassToTrackEntities("grenade", "grenade");
   AddClassToTrackEntities("displacer_portal", "displacer_portal");
+  AddClassToTrackEntities("squidspit", "squidspit");
+  AddClassToTrackEntities("bmortar", "bmortar");
+  AddClassToTrackEntities("gonomespit", "gonomespit");
+  AddClassToTrackEntities("pitdronespike", "pitdronespike");
+  AddClassToTrackEntities("hornet", "hornet");
+  AddClassToTrackEntities("playerhornet", "playerhornet");
+  AddClassToTrackEntities("voltigoreshock", "voltigoreshock");
+  AddClassToTrackEntities("kingpin_plasma_ball", "kingpin_plasma_ball");
+  AddClassToTrackEntities("controller_head_ball", "controller_head_ball");
+  AddClassToTrackEntities("controller_energy_ball", "controller_energy_ball");
+  AddClassToTrackEntities("nihilanth_energy_ball", "nihilanth_energy_ball");
 
   // Work through tracked entities
   for (int i = int(trackedEntities.length()) - 1; i >= 0; --i) {
@@ -286,7 +326,13 @@ void TrackEntities() {
         if (damageScale == 0.0) continue;
         
         int dmg = int(ExplosiveDamges[entityType]);
-        int damageType = (entityType == "sporegrenade") ? (DMG_ACID | DMG_POISON) : DMG_BLAST;
+        
+        // Get damage type - default to DMG_BLAST if not specified
+        int damageType = DMG_BLAST;
+        if (ExplosiveDamageTypes.exists(entityType)) {
+          damageType = int(ExplosiveDamageTypes[entityType]);
+        }
+        
         RadiusDamage(ownerEdict, explosionPos, friendlyNPCEntity.pev, friendlyNPCEntity.pev, dmg * damageScale, (dmg * damageScale) * 2.5, CLASS_NONE, damageType);
       }
     }
