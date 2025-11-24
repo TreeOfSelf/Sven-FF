@@ -187,7 +187,7 @@ HookReturnCode PlayerTakeDamage( DamageInfo@ pDamageInfo ) {
 		string attackerKey = string(attackerPlayer.entindex());
 		if (lastMedkitHealTime.exists(attackerKey)) {
 			float lastHealTime = float(lastMedkitHealTime[attackerKey]);
-			if (g_Engine.time - lastHealTime < 2.0) {
+			if (g_Engine.time - lastHealTime < 1.0) {
 				// Medkit heal cooldown active - no FF damage
 				return HOOK_CONTINUE;
 			}
@@ -315,10 +315,11 @@ void TrackEntities()
 	
 			if (ExplosiveDamges.exists(entityType)) {
 				int dmg = int(ExplosiveDamges[entityType]);
-				// Spore grenades use DMG_GENERIC (exact Valve implementation from sporegrenade.cpp:283)
-				// All other explosives use DMG_BLAST
-				int damageType = (entityType == "sporegrenade") ? DMG_GENERIC : DMG_BLAST;
-				RadiusDamage (ownerEdict, explosionPos,friendlyNPCEntity.pev, friendlyNPCEntity.pev, dmg , dmg * 2.5, CLASS_NONE, damageType );
+        // Spore grenades should specifically do acid + poison damage
+        // All other explosives use DMG_BLAST
+        int damageType = (entityType == "sporegrenade") ? (DMG_ACID | DMG_POISON) : DMG_BLAST;
+        RadiusDamage(ownerEdict, explosionPos, friendlyNPCEntity.pev, friendlyNPCEntity.pev, dmg, dmg * 2.5, CLASS_NONE, damageType);
+
 			}
         }
     }
