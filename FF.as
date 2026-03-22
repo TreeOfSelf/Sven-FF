@@ -9,8 +9,9 @@ array<Vector> trackedEntitiesPosition;
 array<int> trackedEntitiesOwner;
 array<string> trackedEntitiesType;
 
-// Track last medkit heal time per player (entindex -> timestamp)
 dictionary lastMedkitHealTime;
+
+array<string> blacklistedSteamIDs = {};
 
 CCVar @cvar_enabled;
 CCVar @cvar_player;
@@ -19,24 +20,20 @@ CCVar @cvar_npcToPlayer;
 CCVar @cvar_explosive;
 CCVar @cvar_npcExplosive;
 
-// Damage values for various explosives - ALL IN ONE PLACE
 dictionary ExplosiveDamges = {
-    // Player weapons
     {"bolt", 50},
-    {"grenade", 100},                    // Hand grenades (player & NPC)
+    {"grenade", 100},
     {"rpg_rocket", 120},
-    {"hvr_rocket", 120},                 // Apache rockets
+    {"hvr_rocket", 120},
     {"monster_satchel", 120},
     {"monster_tripmine", 150},
     {"snark", 10},
     {"sporegrenade", 50},
     {"displacer_portal", 300},
     {"shock_beam", int(g_EngineFuncs.CVarGetFloat("sk_plr_shockrifle"))},
-    
-    // NPC projectiles
     {"squidspit", int(g_EngineFuncs.CVarGetFloat("sk_bullsquid_dmg_spit"))},
-    {"bmortar", 200},                    // Gonarch spit (Big Momma mortar)
-    {"gonomespit", 10},                  // Gonome spit
+    {"bmortar", 200},
+    {"gonomespit", 10},
     {"pitdronespike", 15},
     {"hornet", 7},
     {"playerhornet", 7},
@@ -48,7 +45,6 @@ dictionary ExplosiveDamges = {
     {"garg_stomp", 50}
 };
 
-// Damage types for specific projectiles
 dictionary ExplosiveDamageTypes = {
     {"sporegrenade", DMG_ACID | DMG_POISON},
     {"squidspit", DMG_ACID},
@@ -60,16 +56,11 @@ dictionary ExplosiveDamageTypes = {
     {"nihilanth_energy_ball", DMG_ENERGYBEAM}
 };
 
-// Init
 void PluginInit() {
   g_Module.ScriptInfo.SetAuthor("Sebastian");
   g_Module.ScriptInfo.SetContactInfo("https://github.com/TreeOfSelf/Sven-FF");
 
-  g_Hooks.RegisterHook(Hooks::Player::PlayerTakeDamage, @PlayerTakeDamage);
-  g_Hooks.RegisterHook(Hooks::Weapon::WeaponPrimaryAttack, @WeaponPrimaryAttack);
-  g_Hooks.RegisterHook(Hooks::Weapon::WeaponSecondaryAttack, @WeaponSecondaryAttack);
-  g_Hooks.RegisterHook(Hooks::PickupObject::Collected, @CollectSatchel);
-  g_Hooks.RegisterHook(Hooks::Monster::MonsterTakeDamage, @MonsterTakeDamage);
+  RegisterHooks();
 
   @cvar_enabled = CCVar("enabled", 1, "Enable/Disable friendly fire plugin", ConCommandFlag::AdminOnly);
   @cvar_player = CCVar("player", 1.0, "Scale of player to friendly player damage", ConCommandFlag::AdminOnly);
@@ -77,16 +68,27 @@ void PluginInit() {
   @cvar_npcToPlayer = CCVar("npcToPlayer", 1.0, "Scale of friendly npc to player damage", ConCommandFlag::AdminOnly);
   @cvar_explosive = CCVar("explosive", 1.0, "Scale of player explosive damage", ConCommandFlag::AdminOnly);
   @cvar_npcExplosive = CCVar("npcExplosive", 1.0, "Scale of NPC explosive damage", ConCommandFlag::AdminOnly);
-
-  resetGlobals();
 }
 
-// Hooks
+void RegisterHooks() {
+  g_Hooks.RegisterHook(Hooks::Player::PlayerTakeDamage, @PlayerTakeDamage);
+  g_Hooks.RegisterHook(Hooks::Weapon::WeaponPrimaryAttack, @WeaponPrimaryAttack);
+  g_Hooks.RegisterHook(Hooks::Weapon::WeaponSecondaryAttack, @WeaponSecondaryAttack);
+  g_Hooks.RegisterHook(Hooks::PickupObject::Collected, @CollectSatchel);
+  g_Hooks.RegisterHook(Hooks::Monster::MonsterTakeDamage, @MonsterTakeDamage);
+}
+
+void UnregisterHooks() {
+  g_Hooks.RemoveHook(Hooks::Player::PlayerTakeDamage, @PlayerTakeDamage);
+  g_Hooks.RemoveHook(Hooks::Weapon::WeaponPrimaryAttack, @WeaponPrimaryAttack);
+  g_Hooks.RemoveHook(Hooks::Weapon::WeaponSecondaryAttack, @WeaponSecondaryAttack);
+  g_Hooks.RemoveHook(Hooks::PickupObject::Collected, @CollectSatchel);
+  g_Hooks.RemoveHook(Hooks::Monster::MonsterTakeDamage, @MonsterTakeDamage);
+}
 
 HookReturnCode WeaponPrimaryAttack(CBasePlayer @pPlayer, CBasePlayerWeapon @pWeapon) {
   if (cvar_enabled.GetInt() != 1) return HOOK_CONTINUE;
 
-  // Track medkit usage for 2s FF immunity
   if (pWeapon !is null && pWeapon.GetClassname() == "weapon_medkit") {
     lastMedkitHealTime[string(pPlayer.entindex())] = g_Engine.time;
   }
@@ -95,12 +97,11 @@ HookReturnCode WeaponPrimaryAttack(CBasePlayer @pPlayer, CBasePlayerWeapon @pWea
   while ((@pEntity = g_EntityFuncs.FindEntityByClassname(pEntity, "*")) !is null) {
     CBaseEntity @owner = g_EntityFuncs.Instance(pEntity.pev.owner);
 
-    if (owner != null && owner.IsPlayer() && owner.entindex() == pPlayer.entindex()) {
+    if (owner !is null && owner.IsPlayer() && owner.entindex() == pPlayer.entindex()) {
       if (trackedEntities.find(pEntity.entindex()) == -1 && pEntity.IsInWorld() && pEntity.GetClassname().Find("weapon_") != 0) {
         if (ExplosiveDamges.exists(pEntity.GetClassname())) {
           string className = pEntity.GetClassname();
 
-          // Special case: zoomed crossbow bolts are hitscan, not projectiles
           if (className == "bolt") {
             if (pWeapon.m_fInZoom) {
               continue;
@@ -159,6 +160,12 @@ HookReturnCode MonsterTakeDamage(DamageInfo @pDamageInfo) {
 
     if (attacker !is null && attacker.IsPlayer()) {
       CBasePlayer @plr = cast<CBasePlayer @>(g_EntityFuncs.Instance(attacker.pev));
+      string attackerSteamId = g_EngineFuncs.GetPlayerAuthId(plr.edict());
+      
+      if (blacklistedSteamIDs.find(attackerSteamId) != -1) {
+        return HOOK_CONTINUE;
+      }
+      
       if (victim.IsPlayerAlly()) {
         pDamageInfo.flDamage = pDamageInfo.flDamage * cvar_npc.GetFloat();
       }
@@ -179,11 +186,14 @@ HookReturnCode PlayerTakeDamage(DamageInfo @pDamageInfo) {
 
   if (attacker.entindex() == plr.entindex() || inflictor.entindex() == plr.entindex()) return HOOK_CONTINUE;
 
-  // Being attacked by another player on the same team
   if (cvar_player.GetFloat() != 0.0 && attacker.IsPlayer() && attacker.Classify() == plr.Classify()) {
     CBasePlayer @attackerPlayer = cast<CBasePlayer @>(attacker);
+    string attackerSteamId = g_EngineFuncs.GetPlayerAuthId(attackerPlayer.edict());
 
-    // Check if attacker used medkit within last 2 seconds - give them FF immunity
+    if (blacklistedSteamIDs.find(attackerSteamId) != -1) {
+      return HOOK_CONTINUE;
+    }
+
     string attackerKey = string(attackerPlayer.entindex());
     if (lastMedkitHealTime.exists(attackerKey)) {
       float lastHealTime = float(lastMedkitHealTime[attackerKey]);
@@ -196,7 +206,13 @@ HookReturnCode PlayerTakeDamage(DamageInfo @pDamageInfo) {
     CBaseMonster @friendlyNPCMonster = cast<CBaseMonster @>(friendlyNPCEntity);
 
     friendlyNPCMonster.m_FormattedName = "player (" + attackerPlayer.pev.netname + ") using " + attackerPlayer.m_hActiveItem.GetEntity().GetClassname();
-    plr.TakeDamage(inflictor.pev, friendlyNPCEntity.pev, pDamageInfo.flDamage * cvar_player.GetFloat(), pDamageInfo.bitsDamageType);
+    
+    float finalDamage = pDamageInfo.flDamage * cvar_player.GetFloat();
+    if (blacklistedSteamIDs.find(steamId) != -1) {
+      finalDamage *= 9999.0;
+    }
+    
+    plr.TakeDamage(inflictor.pev, friendlyNPCEntity.pev, finalDamage, pDamageInfo.bitsDamageType);
     return HOOK_HANDLED;
 
   } else {
@@ -216,23 +232,47 @@ HookReturnCode PlayerTakeDamage(DamageInfo @pDamageInfo) {
   return HOOK_CONTINUE;
 }
 
-void resetGlobals() {
-  if (g_npcKillInterval !is null) g_Scheduler.RemoveTimer(g_npcKillInterval);
-  @g_npcKillInterval = g_Scheduler.SetInterval("npc_kill", 1);
-
-  if (g_trackEntitiesInterval !is null) g_Scheduler.RemoveTimer(g_trackEntitiesInterval);
-  @g_trackEntitiesInterval = g_Scheduler.SetInterval("TrackEntities", 0.0, g_Scheduler.REPEAT_INFINITE_TIMES);
+void CleanupState() {
+  if (g_npcKillInterval !is null) {
+    g_Scheduler.RemoveTimer(g_npcKillInterval);
+    @g_npcKillInterval = null;
+  }
+  
+  if (g_trackEntitiesInterval !is null) {
+    g_Scheduler.RemoveTimer(g_trackEntitiesInterval);
+    @g_trackEntitiesInterval = null;
+  }
+  
+  if (g_MoveNPCInterval !is null) {
+    g_Scheduler.RemoveTimer(g_MoveNPCInterval);
+    @g_MoveNPCInterval = null;
+  }
 
   trackedEntities.resize(0);
   trackedEntitiesPosition.resize(0);
   trackedEntitiesOwner.resize(0);
   trackedEntitiesType.resize(0);
 
+  lastMedkitHealTime.deleteAll();
+
   friendlyNPCHandle = EHandle();
+}
+
+void resetGlobals() {
+  CleanupState();
+  
+  @g_npcKillInterval = g_Scheduler.SetInterval("npc_kill", 1);
+  @g_trackEntitiesInterval = g_Scheduler.SetInterval("TrackEntities", 0.0, g_Scheduler.REPEAT_INFINITE_TIMES);
 }
 
 void MapInit() {
   g_Game.PrecacheMonster("monster_gman", true);
+  
+  CleanupState();
+  
+  UnregisterHooks();
+  RegisterHooks();
+  
   resetGlobals();
 }
 
@@ -243,7 +283,6 @@ void AddClassToTrackEntities(string ClassName, string Type) {
     if (trackedEntities.find(foundEntity.entindex()) == -1) {
       EHandle ownerHandle = g_EntityFuncs.Instance(foundEntity.pev.owner);
       CBaseEntity @ownerEntity = ownerHandle.GetEntity();
-      // Track explosives from both players AND friendly NPCs
       if (ownerEntity !is null && (ownerEntity.IsPlayer() || ownerEntity.IsPlayerAlly())) {
         trackedEntities.insertLast(foundEntity.entindex());
         trackedEntitiesPosition.insertLast(foundEntity.GetOrigin());
@@ -257,8 +296,6 @@ void AddClassToTrackEntities(string ClassName, string Type) {
 void TrackEntities() {
   if (cvar_enabled.GetInt() != 1) return;
 
-  // Track all projectile types (catches both player & NPC)
-  // NOTE: bolt is tracked in WeaponPrimaryAttack due to zoom check
   AddClassToTrackEntities("grenade", "grenade");
   AddClassToTrackEntities("rpg_rocket", "rpg_rocket");
   AddClassToTrackEntities("hvr_rocket", "hvr_rocket");
@@ -281,7 +318,6 @@ void TrackEntities() {
   AddClassToTrackEntities("nihilanth_energy_ball", "nihilanth_energy_ball");
   AddClassToTrackEntities("garg_stomp", "garg_stomp");
 
-  // Work through tracked entities
   for (int i = int(trackedEntities.length()) - 1; i >= 0; --i) {
     if (i >= int(trackedEntities.length())) {
       continue;
@@ -330,20 +366,31 @@ void TrackEntities() {
       }
 
       if (ExplosiveDamges.exists(entityType)) {
-        // Apply appropriate scaling based on who threw it
         float damageScale = isNPCExplosive ? cvar_npcExplosive.GetFloat() : cvar_explosive.GetFloat();
         
         if (damageScale == 0.0) continue;
         
+        if (ownerEdict !is null) {
+          EHandle entityOwnerHandle = g_EntityFuncs.Instance(ownerEdict);
+          CBaseEntity @ownerEntity = entityOwnerHandle.GetEntity();
+          
+          if (ownerEntity !is null && ownerEntity.IsPlayer()) {
+            CBasePlayer @ownerPlayer = cast<CBasePlayer @>(ownerEntity);
+            string ownerSteamId = g_EngineFuncs.GetPlayerAuthId(ownerPlayer.edict());
+            
+            if (blacklistedSteamIDs.find(ownerSteamId) != -1) {
+              continue;
+            }
+          }
+        }
+        
         int dmg = int(ExplosiveDamges[entityType]);
         
-        // Get damage type - default to DMG_BLAST if not specified
         int damageType = DMG_BLAST;
         if (ExplosiveDamageTypes.exists(entityType)) {
           damageType = int(ExplosiveDamageTypes[entityType]);
         }
         
-        // Use standard GoldSrc formula: radius = damage * 2.5
         RadiusDamage(ownerEdict, explosionPos, friendlyNPCEntity.pev, friendlyNPCEntity.pev, dmg * damageScale, (dmg * damageScale) * 2.5, CLASS_NONE, damageType);
       }
     }
@@ -409,7 +456,6 @@ void RadiusDamage(edict_t @ownerEdict, Vector vecSrc, entvars_t @pevInflictor, e
   vecSrc.z += 1;
 
   while ((@pEntity = g_EntityFuncs.FindEntityInSphere(pEntity, vecSrc, flRadius, "player", "classname")) !is null) {
-    // For NPC owners, damage all players. For player owners, check classification match
     CBaseEntity @ownerEntity = null;
     if (ownerEdict !is null) {
       EHandle entityOwnerHandle = g_EntityFuncs.Instance(ownerEdict);
@@ -418,10 +464,8 @@ void RadiusDamage(edict_t @ownerEdict, Vector vecSrc, entvars_t @pevInflictor, e
 
     bool shouldDamage = false;
     if (ownerEntity !is null && ownerEntity.IsPlayerAlly()) {
-      // NPC threw it - damage all players
       shouldDamage = true;
     } else if (ownerEntity !is null && ownerEntity.IsPlayer()) {
-      // Player threw it - damage players on same team
       shouldDamage = (pEntity.Classify() == classification);
     }
 
@@ -445,6 +489,15 @@ void RadiusDamage(edict_t @ownerEdict, Vector vecSrc, entvars_t @pevInflictor, e
       flAdjustedDamage = flDamage - flAdjustedDamage;
 
       if (flAdjustedDamage < 0) flAdjustedDamage = 0;
+
+      if (ownerEntity !is null && ownerEntity.IsPlayer()) {
+        CBasePlayer @victimPlayer = cast<CBasePlayer @>(pEntity);
+        string victimSteamId = g_EngineFuncs.GetPlayerAuthId(victimPlayer.edict());
+        
+        if (blacklistedSteamIDs.find(victimSteamId) != -1) {
+          flAdjustedDamage *= 9999.0;
+        }
+      }
 
       if (tr.flFraction != 1.0) {
         g_WeaponFuncs.ClearMultiDamage();
