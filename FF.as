@@ -182,6 +182,7 @@ HookReturnCode PlayerTakeDamage(DamageInfo @pDamageInfo) {
   CBasePlayer @plr = cast<CBasePlayer @>(g_EntityFuncs.Instance(pDamageInfo.pVictim.pev));
   CBaseEntity @attacker = pDamageInfo.pAttacker;
   CBaseEntity @inflictor = pDamageInfo.pInflictor;
+  if (plr is null || attacker is null || inflictor is null) return HOOK_CONTINUE;
   string steamId = g_EngineFuncs.GetPlayerAuthId(plr.edict());
 
   if (attacker.entindex() == plr.entindex() || inflictor.entindex() == plr.entindex()) return HOOK_CONTINUE;
@@ -204,8 +205,11 @@ HookReturnCode PlayerTakeDamage(DamageInfo @pDamageInfo) {
 
     CBaseEntity @friendlyNPCEntity = getFriendlyNPC(plr.GetOrigin());
     CBaseMonster @friendlyNPCMonster = cast<CBaseMonster @>(friendlyNPCEntity);
+    if (friendlyNPCMonster is null) return HOOK_CONTINUE;
 
-    friendlyNPCMonster.m_FormattedName = "player (" + attackerPlayer.pev.netname + ") using " + attackerPlayer.m_hActiveItem.GetEntity().GetClassname();
+    CBaseEntity @activeItem = attackerPlayer.m_hActiveItem.GetEntity();
+    string weaponName = activeItem !is null ? activeItem.GetClassname() : inflictor.GetClassname();
+    friendlyNPCMonster.m_FormattedName = "player (" + attackerPlayer.pev.netname + ") using " + weaponName;
     
     float finalDamage = pDamageInfo.flDamage * cvar_player.GetFloat();
     if (blacklistedSteamIDs.find(steamId) != -1) {
@@ -220,6 +224,7 @@ HookReturnCode PlayerTakeDamage(DamageInfo @pDamageInfo) {
       CBaseEntity @friendlyNPCEntity = getFriendlyNPC(plr.GetOrigin());
       CBaseMonster @friendlyNPCMonster = cast<CBaseMonster @>(friendlyNPCEntity);
       CBaseMonster @attackerMonster = cast<CBaseMonster @>(attacker);
+      if (friendlyNPCMonster is null || attackerMonster is null) return HOOK_CONTINUE;
       friendlyNPCMonster.m_FormattedName = "friendly NPC (" + attackerMonster.m_FormattedName + ")";
       plr.TakeDamage(inflictor.pev, friendlyNPCEntity.pev, pDamageInfo.flDamage * cvar_npcToPlayer.GetFloat(), pDamageInfo.bitsDamageType);
       if (!plr.IsAlive()) {
@@ -327,7 +332,7 @@ void TrackEntities() {
     if (edict !is null) {
       EHandle entityHandle = g_EntityFuncs.Instance(edict);
       CBaseEntity @entity = entityHandle.GetEntity();
-      if (i < int(trackedEntitiesPosition.length())) {
+      if (entity !is null && i < int(trackedEntitiesPosition.length())) {
         trackedEntitiesPosition[i] = entity.GetOrigin();
       }
     } else {
@@ -342,6 +347,7 @@ void TrackEntities() {
 
       CBaseEntity @friendlyNPCEntity = getFriendlyNPC(explosionPos);
       CBaseMonster @friendlyNPCMonster = cast<CBaseMonster @>(friendlyNPCEntity);
+      if (friendlyNPCMonster is null) continue;
       edict_t @ownerEdict = g_EntityFuncs.IndexEnt(ownerId);
       
       bool isNPCExplosive = false;
@@ -404,6 +410,7 @@ CBaseEntity @getFriendlyNPC(Vector pos) {
   }
 
   CBaseEntity @pEntity = g_EntityFuncs.CreateEntity("monster_gman", {}, true);
+  if (pEntity is null) return null;
   pEntity.pev.solid = SOLID_NOT;
   pEntity.pev.effects |= EF_NODRAW;
   pEntity.pev.takedamage = DAMAGE_NO;
@@ -412,22 +419,15 @@ CBaseEntity @getFriendlyNPC(Vector pos) {
   pEntity.SetPlayerAlly(false);
   pEntity.SetPlayerAllyDirect(false);
 
-  if (pEntity !is null) {
-    friendlyNPCHandle = EHandle(pEntity);
-    return @pEntity;
-  }
-
-  return null;
+  friendlyNPCHandle = EHandle(pEntity);
+  return @pEntity;
 }
 
 void npc_kill() {
-  if (cvar_enabled.GetInt() != 1 || cvar_npc.GetFloat() == 0.0) {
-    g_EngineFuncs.ServerCommand("mp_npckill 2\n");
-    g_EngineFuncs.ServerExecute();
-    return;
-  }
+  int wanted = (cvar_enabled.GetInt() != 1 || cvar_npc.GetFloat() == 0.0) ? 2 : 1;
+  if (int(g_EngineFuncs.CVarGetFloat("mp_npckill")) == wanted) return;
 
-  g_EngineFuncs.ServerCommand("mp_npckill 1\n");
+  g_EngineFuncs.ServerCommand("mp_npckill " + wanted + "\n");
   g_EngineFuncs.ServerExecute();
 }
 
@@ -438,8 +438,10 @@ void RadiusDamage(edict_t @ownerEdict, Vector vecSrc, entvars_t @pevInflictor, e
   if (ownerEdict !is null) {
     EHandle entityOwnerHandle = g_EntityFuncs.Instance(ownerEdict);
     CBaseEntity @ownerEntity = entityOwnerHandle.GetEntity();
-    classification = ownerEntity.Classify();
-    ownerIndex = ownerEntity.entindex();
+    if (ownerEntity !is null) {
+      classification = ownerEntity.Classify();
+      ownerIndex = ownerEntity.entindex();
+    }
   }
 
   CBaseEntity @pEntity;
